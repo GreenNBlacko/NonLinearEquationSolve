@@ -88,9 +88,9 @@ namespace CS_IMGUI.GUI.Menus {
 					ImGui.PushStyleVar(ImGuiStyleVar.CellPadding, newSpacing);
 
 					tableContents.Invoke();
-				}
 
-				ImGui.EndTable();
+					ImGui.EndTable();
+				}
 
 				ImGui.PushStyleVar(ImGuiStyleVar.CellPadding, originalSpacing);
 			}

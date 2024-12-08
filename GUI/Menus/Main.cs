@@ -21,7 +21,7 @@ namespace NonLinearEquationSolve.GUI.Menus {
 		string _function;
 		string _derivative;
 		string _derivativeRoots = string.Empty;
-		List<(double min, double max)> intervals = new();
+		List<(double min, double max, bool flip)> intervals = new();
 		List<string> _rootValues = new();
 		List<char> _rootSigns = new();
 		Action _RootsTable;
@@ -127,7 +127,7 @@ namespace NonLinearEquationSolve.GUI.Menus {
 				_RootsTable1 = delegate { DisplayRootsTable(_rootValues1, _rootSigns1); };
 
 				if (lowestSign != _rootSigns[1])
-					intervals.Add((lowestVal, roots[0].Real));
+					intervals.Add((lowestVal, roots[0].Real, _rootSigns1[0] == '+'));
 
 				var midVal = roots[0].Real + 1;
 				var midSign = solver.Invoke(midVal) < 0 ? '-' : '+';
@@ -141,7 +141,7 @@ namespace NonLinearEquationSolve.GUI.Menus {
 				_RootsTable2 = delegate { DisplayRootsTable(_rootValues2, _rootSigns2); };
 
 				if (midSign != _rootSigns[1])
-					intervals.Add((roots[0].Real, midVal));
+					intervals.Add((roots[0].Real, midVal, _rootSigns2[0] == '+'));
 
 				var highVal = roots[1].Real + 1;
 				var highSign = solver.Invoke(highVal) < 0 ? '-' : '+';
@@ -155,7 +155,7 @@ namespace NonLinearEquationSolve.GUI.Menus {
 				_RootsTable3 = delegate { DisplayRootsTable(_rootValues3, _rootSigns3); };
 
 				if (highSign != _rootSigns[2])
-					intervals.Add((roots[1].Real, highVal));
+					intervals.Add((roots[1].Real, highVal, _rootSigns3[0] == '+'));
 
 				slices = new();
 
@@ -250,7 +250,7 @@ namespace NonLinearEquationSolve.GUI.Menus {
 			}
 		}
 
-		private List<List<(double a, double b, double epsilon, double mid, double fMid, char sign)>> Bisection(List<(double min, double max)> intervals, double tolerance) {
+		private List<List<(double a, double b, double epsilon, double mid, double fMid, char sign)>> Bisection(List<(double min, double max, bool flip)> intervals, double tolerance) {
 			List<List<(double a, double b, double epsilon, double mid, double fMid, char sign)>> output = new();
 
 			var x = SymbolicExpression.Variable("x");
@@ -264,6 +264,10 @@ namespace NonLinearEquationSolve.GUI.Menus {
 				double b = interval.max;
 				double mid = (a + b) / 2.0;
 				double epsilon = b - a;
+				bool flip = interval.flip;
+
+				if (flip)
+					Console.WriteLine($"{a} {b}");
 
 				while (epsilon > tolerance) {
 					double f_a = solver.Invoke(a);
@@ -272,14 +276,20 @@ namespace NonLinearEquationSolve.GUI.Menus {
 
 					// Record iteration data
 					iterations.Add((a, b, epsilon, mid, fMid: f_mid, sign: f_mid < 0 ? '-' : '+'));
-
-					if (f_a * f_mid < 0) { // root is in [a, mid]
-						b = mid;
-					} else if(f_b * f_mid < 0) { // root is in [mid, b]
-						a = mid;
+					if(flip) {
+						if (f_mid < 0) { // root is in [a, mid]
+							b = mid;
+						} else {
+							a = mid;
+						}
 					} else {
-						a = mid;
+						if (f_mid >= 0) { // root is in [a, mid]
+							b = mid;
+						} else {
+							a = mid;
+						}
 					}
+					
 					mid = (a + b) / 2.0;
 
 					epsilon = b - a;
