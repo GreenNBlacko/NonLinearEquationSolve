@@ -1,170 +1,175 @@
-﻿using CS_IMGUI.GUI.Menus.Message;
+﻿using System.Numerics;
 using ImGuiNET;
-using System.Numerics;
+using NonLinearEquationSolve.GUI.Menus.Message;
 
-namespace CS_IMGUI.GUI.Menus {
-	public abstract class Menu {
-		public virtual int priority => 0;
+namespace NonLinearEquationSolve.GUI.Menus;
 
-		protected ContextManager ctx { get; private set; }
+public abstract class Menu {
+    public virtual int priority => 0;
 
-		public Menu(ContextManager _ctx) {
-			ctx = _ctx;
+    protected ContextManager ctx { get; private set; }
 
-			GUI.ctx = ctx;
-		}
+    public Menu(ContextManager _ctx) {
+        ctx = _ctx;
 
-		public abstract void Render();
+        if (GUI.ctx == null)
+            GUI.ctx = ctx;
+    }
 
-		public virtual float GetMenuHeight() {
-			return 0;
-		}
+    public abstract void Render();
 
-		public virtual float GetMenuWidth() {
-			return 500;
-		}
+    public virtual float GetMenuHeight() {
+        return 0;
+    }
 
+    public virtual float GetMenuWidth() {
+        return 500;
+    }
 
-		protected static class GUI {
-			public static ContextManager ctx;
+    protected static class GUI {
+        public static ContextManager ctx;
 
-			public static void FoldoutHeader(string label, ref bool foldout, Action content) {
-				ImGui.SetNextItemOpen(foldout);
-				foldout = ImGui.CollapsingHeader(label);
+        public static void FoldoutHeader(string label, ref bool foldout, Action content) {
+            ImGui.SetNextItemOpen(foldout);
+            foldout = ImGui.CollapsingHeader(label);
 
-				if (foldout) {
-					ImGui.Indent();
-					content.Invoke();
-					ImGui.Unindent();
-				}
-			}
+            if (foldout) {
+                ImGui.Indent();
+                content.Invoke();
+                ImGui.Unindent();
+            }
+        }
 
-			public static void CenteredWrappedText(string text, float padding = 0) {
-				float contentWidth = ImGui.GetContentRegionAvail().X - padding * 2;
+        public static void CenteredWrappedText(string text, float padding = 0) {
+            var contentWidth = ImGui.GetContentRegionAvail().X - padding * 2;
 
-				ImGui.PushTextWrapPos(ImGui.GetCursorPosX() + contentWidth);
+            ImGui.PushTextWrapPos(ImGui.GetCursorPosX() + contentWidth);
 
-				string[] lines = SplitTextIntoWrappedLines(text, contentWidth);
+            string[] lines = SplitTextIntoWrappedLines(text, contentWidth);
 
-				foreach (var line in lines) {
-					Vector2 textSize = ImGui.CalcTextSize(line);
+            foreach (var line in lines) {
+                var textSize = ImGui.CalcTextSize(line);
 
-					float offsetX = (contentWidth - textSize.X) / 2;
+                var offsetX = (contentWidth - textSize.X) / 2;
 
-					if (offsetX > 0) ImGui.SetCursorPosX(ImGui.GetCursorPosX() + offsetX);
+                if (offsetX > 0) ImGui.SetCursorPosX(ImGui.GetCursorPosX() + offsetX);
 
-					ImGui.Text(line);
-				}
+                ImGui.Text(line);
+            }
 
-				ImGui.PopTextWrapPos();
-			}
+            ImGui.PopTextWrapPos();
+        }
 
-			public static void Table(string name, List<string> columns, Action tableContents, ImGuiTableFlags flags = ImGuiTableFlags.SizingStretchSame) {
-				Vector2 originalSpacing = ImGui.GetStyle().CellPadding;
-				Vector2 newSpacing = new Vector2(originalSpacing.X, originalSpacing.Y + 3);
+        public static void Table(string          name,
+                                 List<string>    columns,
+                                 Action          tableContents,
+                                 ImGuiTableFlags flags = ImGuiTableFlags.SizingStretchSame) {
+            var originalSpacing = ImGui.GetStyle().CellPadding;
+            var newSpacing      = new Vector2(originalSpacing.X, originalSpacing.Y + 3);
 
-				if (ImGui.BeginTable(name, columns.Count, flags)) {
-					ImGui.TableNextRow();
+            if (ImGui.BeginTable(name, columns.Count, flags)) {
+                ImGui.TableNextRow();
 
-					foreach (var column in columns) {
-						ImGui.TableNextColumn();
-						ImGui.Text(column);
-					}
+                foreach (var column in columns) {
+                    ImGui.TableNextColumn();
+                    ImGui.Text(column);
+                }
 
-					ImGui.TableNextRow();
-					ImGui.TableSetColumnIndex(0);
+                ImGui.TableNextRow();
+                ImGui.TableSetColumnIndex(0);
 
-					var drawList = ImGui.GetWindowDrawList();
-					var start = ImGui.GetCursorScreenPos();
+                var drawList = ImGui.GetWindowDrawList();
+                var start    = ImGui.GetCursorScreenPos();
 
-					start.X -= 1;
-					start.Y += originalSpacing.Y;
+                start.X -= 1;
+                start.Y += originalSpacing.Y;
 
-					ImGui.TableSetColumnIndex(columns.Count - 1);
+                ImGui.TableSetColumnIndex(columns.Count - 1);
 
-					var end = new Vector2(ImGui.GetCursorScreenPos().X + ImGui.GetContentRegionAvail().X + 1, start.Y + 1);
-					drawList.AddRectFilled(start, end, ImGui.GetColorU32(ImGuiCol.Separator));
+                var end = new Vector2(ImGui.GetCursorScreenPos().X + ImGui.GetContentRegionAvail().X + 1, start.Y + 1);
+                drawList.AddRectFilled(start, end, ImGui.GetColorU32(ImGuiCol.Separator));
 
-					ImGui.PushStyleVar(ImGuiStyleVar.CellPadding, newSpacing);
+                ImGui.PushStyleVar(ImGuiStyleVar.CellPadding, newSpacing);
 
-					tableContents.Invoke();
+                tableContents.Invoke();
 
-					ImGui.EndTable();
-				}
+                ImGui.EndTable();
+            }
 
-				ImGui.PushStyleVar(ImGuiStyleVar.CellPadding, originalSpacing);
-			}
+            ImGui.PushStyleVar(ImGuiStyleVar.CellPadding, originalSpacing);
+        }
 
-			public static void SpaceX(float width) {
-				ImGui.Dummy(new Vector2(width, 0));
-			}
+        public static void SpaceX(float width) {
+            ImGui.Dummy(new Vector2(width, 0));
+        }
 
-			public static void SpaceY(float height) {
-				ImGui.Dummy(new Vector2(0, height));
-			}
+        public static void SpaceY(float height) {
+            ImGui.Dummy(new Vector2(0, height));
+        }
 
-			public static bool FullWidthButton(string label) {
-				return ImGui.Button(label, new Vector2(ImGui.GetContentRegionAvail().X, ImGui.CalcTextSize("L").Y * 1.5f));
-			}
+        public static bool FullWidthButton(string label) {
+            return ImGui.Button(label, new Vector2(ImGui.GetContentRegionAvail().X, ImGui.CalcTextSize("L").Y * 1.5f));
+        }
 
-			public static int? ButtonList(ICollection<string> labels) {
-				List<string> list = [.. labels];
+        public static int? ButtonList(ICollection<string> labels) {
+            List<string> list = [.. labels];
 
-				ImGui.BeginTable("Buttons", labels.Count, ImGuiTableFlags.SizingStretchSame);
-				ImGui.TableNextRow();
-				for (int i = 0; i < labels.Count; i++) {
-					ImGui.TableNextColumn();
-					ImGui.SetNextItemWidth(-1);
-					if (FullWidthButton(list[i]))
-						return i;
-				}
-				ImGui.EndTable();
+            ImGui.BeginTable("Buttons", labels.Count, ImGuiTableFlags.SizingStretchSame);
+            ImGui.TableNextRow();
+            for (var i = 0; i < labels.Count; i++) {
+                ImGui.TableNextColumn();
+                ImGui.SetNextItemWidth(-1);
+                if (FullWidthButton(list[i]))
+                    return i;
+            }
 
-				return null;
-			}
+            ImGui.EndTable();
 
-			public static void ThrowError(string e_message) {
-				ctx.renderer.message = new Error(e_message);
-			}
+            return null;
+        }
 
-			public static void ShowInfo(string i_message) {
-				ctx.renderer.message = new Info(i_message);
-			}
+        public static void ThrowError(string e_message) {
+            ctx.renderer.message = new Error(e_message);
+        }
 
-			public static void ShowDialog(string i_message, ICollection<string> options, Action<int> callback) {
-				ctx.renderer.message = new Dialog(i_message, options, callback);
-			}
+        public static void ShowInfo(string i_message) {
+            ctx.renderer.message = new Info(i_message);
+        }
 
-			private static string[] SplitTextIntoWrappedLines(string text, float wrapWidth) {
-				List<string> wrappedLines = new List<string>();
+        public static void ShowDialog(string i_message, ICollection<string> options, Action<int> callback) {
+            ctx.renderer.message = new Dialog(i_message, options, callback);
+        }
 
-				string[] paragraphs = text.Split('\n');
+        private static string[] SplitTextIntoWrappedLines(string text, float wrapWidth) {
+            List<string> wrappedLines = new();
 
-				foreach (var paragraph in paragraphs) {
-					string[] words = paragraph.Split(' ');
+            string[] paragraphs = text.Split('\n');
 
-					string currentLine = "";
-					foreach (var word in words) {
-						string testLine = (currentLine.Length > 0 ? currentLine + " " : "") + word;
-						Vector2 testSize = ImGui.CalcTextSize(testLine);
+            foreach (var paragraph in paragraphs) {
+                string[] words = paragraph.Split(' ');
 
-						if (testSize.X > wrapWidth) {
-							if (!string.IsNullOrEmpty(currentLine))
-								wrappedLines.Add(currentLine);
+                var currentLine = "";
+                foreach (var word in words) {
+                    var testLine = (currentLine.Length > 0 ? currentLine + " " : "") + word;
+                    var testSize = ImGui.CalcTextSize(testLine);
 
-							currentLine = word;
-						} else {
-							// Add the word to the current line.
-							currentLine = testLine;
-						}
-					}
+                    if (testSize.X > wrapWidth) {
+                        if (!string.IsNullOrEmpty(currentLine))
+                            wrappedLines.Add(currentLine);
 
-					if (!string.IsNullOrEmpty(currentLine))
-						wrappedLines.Add(currentLine);
-				}
+                        currentLine = word;
+                    }
+                    else {
+                        // Add the word to the current line.
+                        currentLine = testLine;
+                    }
+                }
 
-				return wrappedLines.ToArray();
-			}
-		}
-	}
+                if (!string.IsNullOrEmpty(currentLine))
+                    wrappedLines.Add(currentLine);
+            }
+
+            return wrappedLines.ToArray();
+        }
+    }
 }

@@ -1,590 +1,847 @@
-﻿using CS_IMGUI;
-using CS_IMGUI.GUI.Menus;
-using ImGuiNET;
+﻿using ImGuiNET;
 using MathNet.Numerics;
 using MathNet.Symbolics;
 using System.Drawing;
 using System.Text;
-using static CS_IMGUI.GUI.Renderer;
-
-namespace NonLinearEquationSolve.GUI.Menus {
-	public class Main(ContextManager ctx) : Menu(ctx) {
-		public override int priority => (int)e_Menus.Main;
-
-		string expr = "";
-		double epsilon = 0.0001;
-		int selection = 0;
-
-		readonly string[] methods = ["Intervalo dalijimas pusiau", "kirstiniu", "liestiniu"];
-
-		bool _resultExists = false;
-		string _function;
-		string _derivative;
-		string _derivativeRoots = string.Empty;
-		List<(double min, double max, bool flip)> intervals = new();
-		List<string> _rootValues = new();
-		List<char> _rootSigns = new();
-		Action _RootsTable;
-
-		List<string> _rootValues1 = new();
-		List<char> _rootSigns1 = new();
-		Action _RootsTable1;
-
-		List<string> _rootValues2 = new();
-		List<char> _rootSigns2 = new();
-		Action _RootsTable2;
+using static NonLinearEquationSolve.GUI.Renderer;
+
+namespace NonLinearEquationSolve.GUI.Menus;
+
+public class Main(ContextManager ctx) : Menu(ctx) {
+    public override int priority => (int)e_Menus.Main;
+
+    private string expr      = "";
+    private double epsilon   = 0.0001;
+    private int    selection = 0;
+
+    private readonly string[] methods = ["Intervalo dalijimas pusiau", "kirstiniu", "liestiniu"];
 
-		List<string> _rootValues3 = new();
-		List<char> _rootSigns3 = new();
-		Action _RootsTable3;
+    private bool                                      _resultExists      = false;
+    private bool                                      _useManualInterval = false;
+    private (int start, int end)                      _manualInterval    = (0, 0);
+    private string                                    _function          = string.Empty;
+    private string                                    _derivative        = string.Empty;
+    private string                                    _derivativeRoots   = string.Empty;
+    private List<List<string>>                        intervalTests      = [];
+    private Func<double, double>                      _doubleDerivative;
+    private List<(double min, double max, bool flip)> intervals   = [];
+    private List<string>                              _rootValues = [];
+    private List<char>                                _rootSigns  = [];
+    private Action                                    _RootsTable;
 
-		List<List<string>> _rootValuesList = new();
-		List<List<char>> _rootSignsList = new();
-		List<Action<int>> _RootsTables = new();
+    private List<List<string>> _rootValuesList = [];
+    private List<List<char>>   _rootSignsList  = [];
+    private List<Action<int>>  _RootsTables    = [];
 
-		List<List<(double a, double b, double epsilon, double mid, double fMid, char sign)>> slices = new();
-		List<(double root, List<(int iteration, double xn, double epsilon)> steps)> rf_iterations = new();
-		List<(double root, List<(int iteration, double xn, double f_xn, double f_prime_xn)> steps)> n_iterations = new();
-		List<Action<int>> EpsilonTables = new();
-
-		public override void Render() {
-			ImGui.InputText("Expression", ref expr, 256);
-			ImGui.InputDouble("Epsilon", ref epsilon);
+    private List<List<(double a, double b, double epsilon, double mid, double fMid, char sign)>> slices        = [];
+    private List<(double root, List<(int iteration, double xn, double epsilon)> steps)>          rf_iterations = [];
+    private List<(double root, List<(int iteration, double xn, double epsilon)> steps)>          n_iterations  = [];
+    private List<Action<int>>                                                                    EpsilonTables = [];
 
-			if (ImGui.Combo("Method", ref selection, methods, methods.Length))
-				_resultExists = false;
+    public override void Render() {
+        ImGui.InputText("Expression", ref expr, 256);
+        ImGui.InputDouble("Epsilon", ref epsilon);
 
-			if (GUI.FullWidthButton("Calculate")) {
-				CalculateExpression();
-			}
+        ImGui.Checkbox("Use graphing method", ref _useManualInterval);
 
-			if (_resultExists)
-				RenderResults();
-		}
+        if (_useManualInterval) {
+            ImGui.InputInt("Start", ref _manualInterval.start);
+            ImGui.InputInt("End",   ref _manualInterval.end);
+        }
 
-		private void RenderResults() {
-			ImGui.SeparatorText("Results");
+        if (ImGui.Combo("Method", ref selection, methods, methods.Length))
+            _resultExists = false;
 
-			ImGui.Text($"f(x) = {_function}");
-			ImGui.Text($"f'(x) = {_derivative}");
-			ImGui.Text(_derivativeRoots);
+        if (GUI.FullWidthButton("Calculate")) CalculateExpression();
 
-			_RootsTable.Invoke();
+        if (_resultExists)
+            RenderResults();
+    }
 
-			switch (selection) {
-				case 0: // div by half
-					_RootsTable1.Invoke();
-					_RootsTable2.Invoke();
-					_RootsTable3.Invoke();
+    private void RenderResults() {
+        ImGui.SeparatorText("Results");
 
-					for (int i = 0; i < EpsilonTables.Count; i++) {
-						Action<int>? table = EpsilonTables[i];
-						table.Invoke(i);
-					}
-					break;
+        ImGui.Text($"f(x) = {_function}");
+        ImGui.Text($"f'(x) = {_derivative}");
+        ImGui.Text(_derivativeRoots);
 
-				case 1: // Regula falsi
-					for (int i = 0; i < _RootsTables.Count; i++) {
-						Action<int>? table = _RootsTables[i];
-						table.Invoke(i);
-					}
+        _RootsTable.Invoke();
 
-					for (int i = 0; i < EpsilonTables.Count; i++) {
-						Action<int>? table = EpsilonTables[i];
-						table.Invoke(i);
-					}
-					break;
+        switch (selection) {
+            case 0: // div by half
+                for (var i = 0; i < _RootsTables.Count; i++) {
+                    var table = _RootsTables[i];
+                    table.Invoke(i);
+                }
 
-				case 2: // Newton
-					for (int i = 0; i < _RootsTables.Count; i++) {
-						Action<int>? table = _RootsTables[i];
-						table.Invoke(i);
-					}
+                for (var i = 0; i < EpsilonTables.Count; i++) {
+                    var table = EpsilonTables[i];
+                    table.Invoke(i);
+                }
 
-					for (int i = 0; i < EpsilonTables.Count; i++) {
-						Action<int>? table = EpsilonTables[i];
-						table.Invoke(i);
-					}
-					break;
-			}
-		}
+                break;
 
-		private void CalculateExpression() {
-			try {
-				var x = SymbolicExpression.Variable("x");
-				var function = SymbolicExpression.Parse(expr);
-				var solver = function.Compile("x");
+            case 1: // Regula falsi
+                for (var i = 0; i < _RootsTables.Count; i++) {
+                    var table = _RootsTables[i];
+                    table.Invoke(i);
+                }
 
-				_function = function.ToString();
+                for (var i = 0; i < EpsilonTables.Count; i++) {
+                    foreach (var test in intervalTests[i])
+                        ImGui.Text(test);
 
-				var derivative = function.Differentiate(x);
+                    var table = EpsilonTables[i];
+                    table.Invoke(i);
+                }
 
-				_derivative = derivative.ToString();
+                break;
 
-				var polynomial = derivative.Coefficients(x);
+            case 2: // Newton
+                for (var i = 0; i < _RootsTables.Count; i++) {
+                    var table = _RootsTables[i];
+                    table.Invoke(i);
+                }
 
-				List<double> coeffs = new();
+                for (var i = 0; i < EpsilonTables.Count; i++) {
+                    foreach (var test in intervalTests[i])
+                        ImGui.Text(test);
 
-				foreach (var coefficient in polynomial) {
-					coeffs.Add(double.Parse(coefficient.ToString()));
-				}
+                    var table = EpsilonTables[i];
+                    table.Invoke(i);
+                }
 
-				var roots = FindRoots.Polynomial(coeffs.ToArray());
+                break;
+        }
+    }
 
-				intervals = new();
+    private void CalculateExpression() {
+        try {
+            expr = expr.Replace('X', 'x');
 
-				_rootValues = new();
-				_rootSigns = new();
+            intervalTests = [];
 
-				_rootValues.Add("-inf");
-				_rootSigns.Add('-');
+            var x        = SymbolicExpression.Variable("x");
+            var function = SymbolicExpression.Parse(expr);
+            var solver   = function.Compile("x");
 
-				_derivativeRoots = string.Empty;
+            _function = function.ToString();
 
-				foreach (var root in roots) {
-					_derivativeRoots += $"x = {root.Real}  or  ";
-					_rootValues.Add(root.Real.ToString());
-					_rootSigns.Add(solver.Invoke(root.Real) < 0 ? '-' : '+');
-				}
+            var derivative = function.Differentiate(x);
 
-				_rootValues.Add("inf");
-				_rootSigns.Add('+');
+            _derivative = derivative.ToString();
 
-				_derivativeRoots = _derivativeRoots.Substring(0, _derivativeRoots.Length - "  or  ".Length);
+            var polynomial = derivative.Coefficients(x);
 
-				_RootsTable = delegate { DisplayRootsTable(_rootValues, _rootSigns); };
+            List<double> coeffs = [];
 
-				switch (selection) {
-					case 0: // div by 2
-						_rootValues1 = new();
-						_rootValues2 = new();
-						_rootValues3 = new();
+            foreach (var coefficient in polynomial) coeffs.Add(double.Parse(coefficient.ToString()));
 
-						_rootSigns1 = new();
-						_rootSigns2 = new();
-						_rootSigns3 = new();
+            var roots = FindRoots.Polynomial(coeffs.ToArray());
 
-						var lowestVal = roots[0].Real - 1;
-						var lowestSign = solver.Invoke(lowestVal) < 0 ? '-' : '+';
-						_rootValues1.Add(lowestVal.ToString());
-						_rootSigns1.Add(lowestSign);
+            _RootsTables = [];
 
-						_rootValues1.Add(roots[0].Real.ToString());
-						_rootSigns1.Add(_rootSigns[1]);
+            var lowestVal = 0d;
+            var highVal   = 0d;
 
-						_RootsTable1 = delegate { DisplayRootsTable(_rootValues1, _rootSigns1); };
+            if (_useManualInterval) {
+                lowestVal = _manualInterval.start;
+                highVal   = _manualInterval.end;
 
-						if (lowestSign != _rootSigns[1])
-							intervals.Add((lowestVal, roots[0].Real, _rootSigns1[0] == '+'));
+                _rootValues = [];
+                _rootSigns  = [];
 
-						var midVal = roots[0].Real + 1;
-						var midSign = solver.Invoke(midVal) < 0 ? '-' : '+';
+                _rootValues.Add("-inf");
+                _rootSigns.Add('-');
 
-						_rootValues2.Add(roots[0].Real.ToString());
-						_rootSigns2.Add(_rootSigns[1]);
+                _derivativeRoots = string.Empty;
 
-						_rootValues2.Add(midVal.ToString());
-						_rootSigns2.Add(midSign);
+                if (selection == 0) {
+                    _derivativeRoots += $"x = {lowestVal}  or  ";
+                    _derivativeRoots += $"x = {highVal}  or  ";
+                }
+                else {
+                    var doubleDerivative = derivative.Differentiate(x);
+                    _doubleDerivative = doubleDerivative.Compile("x");
+                    _derivativeRoots  = $"f''(x) = {doubleDerivative.ToString}";
+                }
 
-						_RootsTable2 = delegate { DisplayRootsTable(_rootValues2, _rootSigns2); };
+                _rootValues.Add(lowestVal.ToString());
+                _rootSigns.Add(solver.Invoke(lowestVal) < 0 ? '-' : '+');
 
-						if (midSign != _rootSigns[1])
-							intervals.Add((roots[0].Real, midVal, _rootSigns2[0] == '+'));
+                _rootValues.Add(highVal.ToString());
+                _rootSigns.Add(solver.Invoke(highVal) < 0 ? '-' : '+');
 
-						var highVal = roots[1].Real + 1;
-						var highSign = solver.Invoke(highVal) < 0 ? '-' : '+';
+                _rootValues.Add("inf");
+                _rootSigns.Add('+');
 
-						_rootValues3.Add(roots[1].Real.ToString());
-						_rootSigns3.Add(_rootSigns[2]);
+                if (selection == 0)
+                    _derivative = "-";
+            }
+            else {
+                lowestVal = roots[0].Real - 1;
+                highVal   = roots[1].Real + 1;
 
-						_rootValues3.Add(highVal.ToString());
-						_rootSigns3.Add(highSign);
+                _rootValues = [];
+                _rootSigns  = [];
 
-						_RootsTable3 = delegate { DisplayRootsTable(_rootValues3, _rootSigns3); };
+                _rootValues.Add("-inf");
+                _rootSigns.Add('-');
 
-						if (highSign != _rootSigns[2])
-							intervals.Add((roots[1].Real, highVal, _rootSigns3[0] == '+'));
+                _derivativeRoots = string.Empty;
 
-						slices = new();
+                if (selection != 0) {
+                    var doubleDerivative = derivative.Differentiate(x);
+                    _doubleDerivative = doubleDerivative.Compile("x");
+                    _derivativeRoots  = $"f''(x) = {doubleDerivative.ToString()}\n";
+                }
 
-						slices = Bisection(intervals, epsilon);
+                foreach (var root in roots) {
+                    _derivativeRoots += $"x = {root.Real}  or  ";
+                    _rootValues.Add(root.Real.ToString());
+                    _rootSigns.Add(solver.Invoke(root.Real) < 0 ? '-' : '+');
+                }
 
-						EpsilonTables = new();
+                _rootValues.Add("inf");
+                _rootSigns.Add('+');
+            }
 
-						for (int o = 0; o < slices.Count; o++) {
-							EpsilonTables.Add((int idx) => {
-								List<(double a, double b, double epsilon, double mid, double fMid, char sign)> slice = slices[idx];
+            intervals = [];
 
-								var lastSign = '*';
-								GUI.Table("EpsilonTable", ["n", "a", "b", "epsilon", "mid", "f(xn)", "sign f(x)"], delegate {
-									for (int i = 0; i < slice.Count; i++) {
-										var row = slice[i];
+            _derivativeRoots = _derivativeRoots.Substring(0, _derivativeRoots.Length - "  or  ".Length);
 
-										ImGui.TableNextRow();
+            _RootsTable = delegate { DisplayRootsTable(_rootValues, _rootSigns); };
 
-										ImGui.TableNextColumn();
-										ImGui.Text(i.ToString());
+            EpsilonTables = [];
 
-										ImGui.TableNextColumn();
-										if (lastSign == '-')
-											ImGui.TextColored(Color.Red.ToVector(), row.a.ToString());
-										else
-											ImGui.Text(row.a.ToString());
+            switch (selection) {
+                case 0: // div by 2
+                    if (_useManualInterval) {
+                        intervals.Add((_manualInterval.start, _manualInterval.end,
+                                       solver.Invoke(_manualInterval.start) > 0));
+                    }
+                    else {
+                        var bs_roots = FindRootIntervals(solver, lowestVal, highVal, 1);
 
-										ImGui.TableNextColumn();
-										if (lastSign == '+')
-											ImGui.TextColored(Color.Red.ToVector(), row.b.ToString());
-										else
-											ImGui.Text(row.b.ToString());
+                        foreach (var root in bs_roots) intervals.Add((root.min, root.max, solver.Invoke(root.min) > 0));
+                    }
 
-										ImGui.TableNextColumn();
-										ImGui.Text(row.epsilon.ToString());
+                    slices = [];
 
-										ImGui.TableNextColumn();
-										ImGui.Text(row.mid.ToString());
+                    slices = Bisection(intervals, epsilon);
 
-										ImGui.TableNextColumn();
-										ImGui.Text(row.fMid.ToString());
+                    for (var i = 0; i < intervals.Count; i++) {
+                        var idx     = int.Parse(i.ToString());
+                        var bs_root = intervals[idx];
 
-										ImGui.TableNextColumn();
-										ImGui.TextColored(Color.Red.ToVector(), row.sign.ToString());
+                        List<string> bs_intervals = [];
+                        List<char>   bs_signs     = [];
 
-										if (i != slice.Count - 1)
-											lastSign = row.sign;
-									}
-								}, ImGuiTableFlags.Borders);
+                        bs_intervals.Add(bs_root.min.ToString());
+                        bs_intervals.Add(bs_root.max.ToString());
 
-								var answer = lastSign == '-' ? slice[slice.Count - 1].a : slice[slice.Count - 1].b;
+                        bs_signs.Add(solver.Invoke(bs_root.min) < 0 ? '-' : '+');
+                        bs_signs.Add(solver.Invoke(bs_root.max) < 0 ? '-' : '+');
 
-								int precision = epsilon.ToString("0.################").Split('.')[1].Length;
-								var sb = new StringBuilder();
-								sb.Append("##0");
-								sb.Append('.');
-								sb.Append('0', precision);
-								ImGui.Text($"x{idx + 1} = {Math.Round(answer, precision).ToString(sb.ToString())}");
-							});
-						}
-						break;
+                        _rootValuesList.Add(bs_intervals);
+                        _rootSignsList.Add(bs_signs);
 
-					case 1: // Regula Falsi
-						lowestVal = roots[0].Real - 1;
-						highVal = roots[1].Real + 1;
+                        _RootsTables.Add((int index) => {
+                            var intervals = _rootValuesList[index];
+                            var signs     = _rootSignsList[index];
 
-						var rf_roots = FindRootIntervals(solver, lowestVal, highVal, 1);
+                            DisplayRootsTable(intervals, signs);
+                        });
 
-						_rootSignsList.Clear();
-						_rootValuesList.Clear();
-						_RootsTables.Clear();
-						rf_iterations = new();
-						EpsilonTables = new();
+                        EpsilonTables.Add((int index) => {
+                            var slice = slices[index];
 
-						for (int i = 0; i < rf_roots.Count; i++) {
-							var idx = int.Parse(i.ToString());
-							var rf_root = rf_roots[idx];
+                            var lastSign = '*';
 
-							List<string> rf_intervals = new();
-							List<char> rf_signs = new();
+                            GUI.Table("EpsilonTable", ["n", "a", "b", "epsilon", "xn", "fxn", "sign"], delegate {
+                                for (var i = 0; i < slice.Count; i++) {
+                                    var row = slice[i];
 
-							rf_intervals.Add(rf_root.min.ToString());
-							rf_intervals.Add(rf_root.max.ToString());
+                                    ImGui.TableNextRow();
 
-							rf_signs.Add(solver.Invoke(rf_root.min) < 0 ? '-' : '+');
-							rf_signs.Add(solver.Invoke(rf_root.max) < 0 ? '-' : '+');
+                                    ImGui.TableNextColumn();
+                                    ImGui.Text(i.ToString());
 
-							_rootValuesList.Add(rf_intervals);
-							_rootSignsList.Add(rf_signs);
+                                    ImGui.TableNextColumn();
+                                    if (lastSign == '-')
+                                        ImGui.TextColored(Color.Red.ToVector(), row.a.ToString());
+                                    else
+                                        ImGui.Text(row.a.ToString());
 
-							_RootsTables.Add((int index) => {
-								var intervals = _rootValuesList[index];
-								var signs = _rootSignsList[index];
+                                    ImGui.TableNextColumn();
+                                    if (lastSign == '+')
+                                        ImGui.TextColored(Color.Red.ToVector(), row.b.ToString());
+                                    else
+                                        ImGui.Text(row.b.ToString());
 
-								DisplayRootsTable(intervals, signs);
-							});
+                                    ImGui.TableNextColumn();
+                                    ImGui.Text(row.epsilon.ToString());
 
-							rf_iterations.Add(RegulaFalsi(solver, rf_root.min, rf_root.max, epsilon));
+                                    ImGui.TableNextColumn();
+                                    ImGui.Text(row.mid.ToString());
 
-							EpsilonTables.Add((int index) => {
-								var iteration = rf_iterations[index];
+                                    ImGui.TableNextColumn();
+                                    ImGui.Text(row.fMid.ToString());
 
-								GUI.Table("EpsilonTable", ["n", "xn", "epsilon"], delegate {
-									for (int i = 0; i < iteration.steps.Count; i++) {
-										var row = iteration.steps[i];
+                                    ImGui.TableNextColumn();
+                                    ImGui.TextColored(Color.Red.ToVector(), row.sign.ToString());
 
-										ImGui.TableNextRow();
+                                    if (i != slice.Count - 1)
+                                        lastSign = row.sign;
+                                }
+                            }, ImGuiTableFlags.Borders);
+                            var answer = lastSign == '-' ? slice[slice.Count - 1].a : slice[slice.Count - 1].b;
 
-										ImGui.TableNextColumn();
-										ImGui.Text(row.iteration.ToString());
+                            var precision = epsilon.ToString("0.################").Split('.')[1].Length;
+                            var sb        = new StringBuilder();
+                            sb.Append("##0");
+                            sb.Append('.');
+                            sb.Append('0', precision);
+                            ImGui.Text($"x{idx + 1} = {Math.Round(answer, precision).ToString(sb.ToString())}");
+                        });
+                    }
 
-										ImGui.TableNextColumn();
-										ImGui.Text(row.xn.ToString());
+                    break;
 
-										ImGui.TableNextColumn();
-										ImGui.Text(i == 0 ? "-" : row.epsilon.ToString());
-									}
-								}, ImGuiTableFlags.Borders);
-								var answer = iteration.root;
+                case 1: // Regula Falsi, f'(x), M max, m min, M <= 2m, f''(start) f''(end)
+                    if (_useManualInterval) {
+                        intervals.Add((_manualInterval.start, _manualInterval.end,
+                                       solver.Invoke(_manualInterval.start) > 0));
+                    }
+                    else {
+                        var rf_roots = FindRootIntervals(solver, lowestVal, highVal, 1);
 
-								int precision = epsilon.ToString("0.################").Split('.')[1].Length;
-								var sb = new StringBuilder();
-								sb.Append("##0");
-								sb.Append('.');
-								sb.Append('0', precision);
-								ImGui.Text($"x{idx + 1} = {Math.Round(answer, precision).ToString(sb.ToString())}");
-							});
-						}
-						break;
+                        foreach (var root in rf_roots) intervals.Add((root.min, root.max, solver.Invoke(root.min) > 0));
+                    }
 
-					case 2: // Newton
-						lowestVal = roots[0].Real - 1;
-						highVal = roots[1].Real + 1;
+                    _rootSignsList.Clear();
+                    _rootValuesList.Clear();
+                    _RootsTables.Clear();
+                    rf_iterations = [];
+                    EpsilonTables = [];
 
-						var dsolver = derivative.Compile("x");
+                    for (var i = 0; i < intervals.Count; i++) {
+                        var tests   = new List<string>();
+                        var idx     = int.Parse(i.ToString());
+                        var rf_root = intervals[idx];
 
-						var n_roots = FindRootIntervals(solver, lowestVal, highVal, 1);
+                        List<string> rf_intervals = [];
+                        List<char>   rf_signs     = [];
 
-						_rootSignsList.Clear();
-						_rootValuesList.Clear();
-						_RootsTables.Clear();
-						n_iterations = new();
-						EpsilonTables = new();
+                        rf_intervals.Add(rf_root.min.ToString());
+                        rf_intervals.Add(rf_root.max.ToString());
 
-						for (int i = 0; i < n_roots.Count; i++) {
-							var idx = int.Parse(i.ToString());
-							var n_root = n_roots[idx];
+                        rf_signs.Add(solver.Invoke(rf_root.min) < 0 ? '-' : '+');
+                        rf_signs.Add(solver.Invoke(rf_root.max) < 0 ? '-' : '+');
 
-							List<string> n_intervals = new();
-							List<char> n_signs = new();
+                        _rootValuesList.Add(rf_intervals);
+                        _rootSignsList.Add(rf_signs);
 
-							n_intervals.Add(n_root.min.ToString());
-							n_intervals.Add(n_root.max.ToString());
+                        _RootsTables.Add((int index) => {
+                            var intervals = _rootValuesList[index];
+                            var signs     = _rootSignsList[index];
 
-							n_signs.Add(solver.Invoke(n_root.min) < 0 ? '-' : '+');
-							n_signs.Add(solver.Invoke(n_root.max) < 0 ? '-' : '+');
+                            DisplayRootsTable(intervals, signs);
+                        });
 
-							_rootValuesList.Add(n_intervals);
-							_rootSignsList.Add(n_signs);
+                        var derivativeSolver = derivative.Compile("x");
 
-							_RootsTables.Add((int index) => {
-								var intervals = _rootValuesList[index];
-								var signs = _rootSignsList[index];
+                        var sb = new StringBuilder();
 
-								DisplayRootsTable(intervals, signs);
-							});
+                        var rootMin = rf_root.min;
+                        var rootMax = rf_root.max;
 
-							n_iterations.Add(NewtonsMethod(solver, dsolver, (n_root.min + n_root.max) / 2, epsilon));
+                        var a = Math.Abs(derivativeSolver.Invoke(rootMin));
+                        var b = Math.Abs(derivativeSolver.Invoke(rootMax));
 
-							EpsilonTables.Add((int index) => {
-								var iteration = rf_iterations[index];
+                        var max = Math.Max(a, b);
+                        var min = Math.Min(a, b);
 
-								GUI.Table("EpsilonTable", ["n", "xn", "epsilon"], delegate {
-									for (int i = 0; i < iteration.steps.Count; i++) {
-										var row = iteration.steps[i];
+                        var maxVar = max == a ? rootMin : rootMax;
+                        var minVar = min == a ? rootMin : rootMax;
 
-										ImGui.TableNextRow();
+                        sb.AppendLine($"[{rootMin}; {rootMax}]");
+                        sb.AppendLine($"|f'({maxVar})| = {max} = max");
+                        sb.AppendLine($"|f'({minVar})| = {min} = min");
+                        sb.Append($"{max} <= {min * 2} - ");
 
-										ImGui.TableNextColumn();
-										ImGui.Text(row.iteration.ToString());
+                        while (max > min * 2) {
+                            sb.AppendLine("invalid");
+                            tests.Add(sb.ToString());
+                            sb.Clear();
 
-										ImGui.TableNextColumn();
-										ImGui.Text(row.xn.ToString());
+                            var signA    = solver.Invoke(rootMin) < 0 ? '-' : '+';
+                            var signB    = solver.Invoke(rootMax) < 0 ? '-' : '+';
+                            var midPoint = (rootMin + rootMax) / 2;
 
-										ImGui.TableNextColumn();
-										ImGui.Text(i == 0 ? "-" : row.epsilon.ToString());
-									}
-								}, ImGuiTableFlags.Borders);
-								var answer = iteration.root;
+                            Console.WriteLine(midPoint);
 
-								int precision = epsilon.ToString("0.################").Split('.')[1].Length;
-								var sb = new StringBuilder();
-								sb.Append("##0");
-								sb.Append('.');
-								sb.Append('0', precision);
-								ImGui.Text($"x{idx + 1} = {Math.Round(answer, precision).ToString(sb.ToString())}");
-							});
+                            var midPointSign = solver.Invoke(midPoint) < 0 ? '-' : '+';
+                            Console.WriteLine(signA);
+                            Console.WriteLine(signB);
+                            Console.WriteLine(midPointSign);
+                            Console.WriteLine();
 
-						}
-						break;
-				}
+                            if ((midPointSign == '+' && rf_root.flip) || (midPointSign == '-' && !rf_root.flip))
+                                rootMin = midPoint;
+                            else
+                                rootMax = midPoint;
 
-				_resultExists = true;
+                            a = Math.Abs(derivativeSolver.Invoke(rootMin));
+                            b = Math.Abs(derivativeSolver.Invoke(rootMax));
 
-			} catch {
-				_resultExists = false;
+                            max = Math.Max(a, b);
+                            min = Math.Min(a, b);
 
-				GUI.ThrowError("The values provided are invalid. Try again");
-			}
-		}
+                            maxVar = max == a ? rootMin : rootMax;
+                            minVar = min == a ? rootMin : rootMax;
 
-		List<(double min, double max)> FindRootIntervals(Func<double, double> f, double start, double end, double step) {
-			var intervals = new List<(double min, double max)>();
+                            sb.AppendLine($"[{rootMin}; {rootMax}]");
+                            sb.AppendLine($"|f'({maxVar})| = {max} = max");
+                            sb.AppendLine($"|f'({minVar})| = {min} = min");
+                            sb.Append($"{max} <= {min * 2} - ");
+                        }
 
-			double prevX = start;
-			double prevY = f(prevX);
+                        sb.AppendLine("valid");
+                        tests.Add(sb.ToString());
+                        sb.Clear();
 
-			for (double x = start + step; x <= end; x += step) {
-				double y = f(x);
+                        var da = _doubleDerivative.Invoke(rootMin);
+                        var db = _doubleDerivative.Invoke(rootMax);
 
-				// Check for a sign change
-				if (prevY * y < 0) // Root is bracketed
-				{
-					intervals.Add((prevX, x));
-				}
+                        var aSign = solver.Invoke(rootMin) < 0 ? '-' : '+';
+                        var bSign = solver.Invoke(rootMax) < 0 ? '-' : '+';
 
-				// Update previous values
-				prevX = x;
-				prevY = y;
-			}
+                        var dfx     = Math.Max(da, db);
+                        var dfxSign = dfx < 0 ? '-' : '+';
 
-			return intervals;
-		}
+                        var xn   = 0d;
+                        var side = 0;
 
-		(double root, List<(int iteration, double xn, double f_xn, double f_prime_xn)> steps) NewtonsMethod(Func<double, double> f, Func<double, double> fPrime, double initialGuess, double epsilon) {
-			var steps = new List<(int iteration, double xn, double f_xn, double f_prime_xn)>();
-			double xn = initialGuess;
+                        if (aSign == dfxSign) {
+                            xn   = rootMax;
+                            side = 0;
+                        }
+                        else if (bSign == dfxSign) {
+                            xn   = rootMin;
+                            side = 1;
+                        }
+                        else {
+                            _RootsTables.RemoveAt(i);
+                            continue;
+                        }
 
-			for (int iteration = 0; ; iteration++) {
-				double f_xn = f(xn);
-				double f_prime_xn = fPrime(xn);
+                        rf_iterations.Add(RegulaFalsi(solver, xn, rootMin, rootMax, epsilon, side));
 
-				// Record the current step
-				steps.Add((iteration, xn, f_xn, f_prime_xn));
+                        EpsilonTables.Add((int index) => {
+                            var iteration = rf_iterations[index];
 
-				// Check if derivative is zero to avoid division by zero
-				if (Math.Abs(f_prime_xn) < 1e-12) {
-					throw new InvalidOperationException("Derivative is zero. Newton's Method fails.");
-				}
+                            GUI.Table("EpsilonTable", ["n", "xn", "epsilon"], delegate {
+                                for (var i = 0; i < iteration.steps.Count; i++) {
+                                    var row = iteration.steps[i];
 
-				// Calculate the next approximation
-				double nextXn = xn - f_xn / f_prime_xn;
+                                    ImGui.TableNextRow();
 
-				// Check stopping criteria
-				if (Math.Abs(f_xn) < epsilon || Math.Abs(nextXn - xn) < epsilon) {
-					xn = nextXn;
-					break;
-				}
+                                    ImGui.TableNextColumn();
+                                    ImGui.Text(row.iteration.ToString());
 
-				xn = nextXn;
-			}
+                                    ImGui.TableNextColumn();
+                                    ImGui.Text(row.xn.ToString());
 
-			return (xn, steps);
-		}
+                                    ImGui.TableNextColumn();
+                                    ImGui.Text(i == 0 ? "-" : row.epsilon.ToString());
+                                }
+                            }, ImGuiTableFlags.Borders);
+                            var answer = iteration.root;
 
-		(double root, List<(int iteration, double xn, double epsilon)> steps) RegulaFalsi(Func<double, double> f, double a, double b, double epsilon) {
-			var steps = new List<(int iteration, double xn, double epsilon)>();
+                            var precision = epsilon.ToString("0.################").Split('.')[1].Length;
+                            var sb        = new StringBuilder();
+                            sb.Append("##0");
+                            sb.Append('.');
+                            sb.Append('0', precision);
+                            ImGui.Text($"x{idx + 1} = {Math.Round(answer, precision).ToString(sb.ToString())}");
+                        });
 
-			double xn_old = 0;
-			double xn = a; // Initial guess
-			for (int iteration = 0; ; iteration++) {
-				double fa = f(a);
-				double fb = f(b);
+                        intervalTests.Add(tests);
+                    }
 
-				// Calculate the new approximation
-				xn = b - fb * (b - a) / (fb - fa);
-				double fxn = f(xn);
+                    break;
 
-				// Record the current step
-				steps.Add((iteration, xn, Math.Abs(xn - xn_old)));
+                case 2: // Newton
+                    if (_useManualInterval) {
+                        intervals.Add((_manualInterval.start, _manualInterval.end,
+                                       solver.Invoke(_manualInterval.start) > 0));
+                    }
+                    else {
+                        var rf_roots = FindRootIntervals(solver, lowestVal, highVal, 1);
 
-				// Check stopping criteria
-				if (Math.Abs(fxn) < epsilon || Math.Abs(b - a) < epsilon)
-					break;
+                        foreach (var root in rf_roots) intervals.Add((root.min, root.max, solver.Invoke(root.min) > 0));
+                    }
 
-				// Update the interval
-				if (fa * fxn < 0)
-					b = xn; // Root is in [a, xn]
-				else
-					a = xn; // Root is in [xn, b]
+                    _rootSignsList.Clear();
+                    _rootValuesList.Clear();
+                    _RootsTables.Clear();
+                    rf_iterations = [];
+                    EpsilonTables = [];
 
-				xn_old = xn;
-			}
+                    for (var i = 0; i < intervals.Count; i++) {
+                        var tests  = new List<string>();
+                        var idx    = int.Parse(i.ToString());
+                        var n_root = intervals[idx];
 
-			return (xn, steps);
-		}
+                        List<string> n_intervals = [];
+                        List<char>   n_signs     = [];
 
-		private void DisplayRootsTable(List<string> rootValues, List<char> rootSigns) {
-			if (ImGui.BeginTable("SignTable", rootValues.Count + 1, ImGuiTableFlags.Borders)) {
-				ImGui.TableNextRow();
+                        n_intervals.Add(n_root.min.ToString());
+                        n_intervals.Add(n_root.max.ToString());
 
-				ImGui.TableNextColumn();
-				ImGui.Text("x");
+                        n_signs.Add(solver.Invoke(n_root.min) < 0 ? '-' : '+');
+                        n_signs.Add(solver.Invoke(n_root.max) < 0 ? '-' : '+');
 
-				foreach (var root in rootValues) {
-					ImGui.TableNextColumn();
-					ImGui.Text(root);
-				}
+                        _rootValuesList.Add(n_intervals);
+                        _rootSignsList.Add(n_signs);
 
-				ImGui.TableNextRow();
+                        _RootsTables.Add((int index) => {
+                            var intervals = _rootValuesList[index];
+                            var signs     = _rootSignsList[index];
 
-				ImGui.TableNextColumn();
-				ImGui.Text("sign f(x)");
+                            DisplayRootsTable(intervals, signs);
+                        });
 
-				foreach (var root in rootSigns) {
-					ImGui.TableNextColumn();
-					ImGui.Text(root.ToString());
-				}
+                        var derivativeSolver = derivative.Compile("x");
 
-				ImGui.EndTable();
-			}
-		}
+                        var sb = new StringBuilder();
 
-		private List<List<(double a, double b, double epsilon, double mid, double fMid, char sign)>> Bisection(List<(double min, double max, bool flip)> intervals, double tolerance) {
-			List<List<(double a, double b, double epsilon, double mid, double fMid, char sign)>> output = new();
+                        var rootMin = n_root.min;
+                        var rootMax = n_root.max;
 
-			var x = SymbolicExpression.Variable("x");
-			var function = SymbolicExpression.Parse(expr);
-			var solver = function.Compile("x");
+                        var a = Math.Abs(derivativeSolver.Invoke(rootMin));
+                        var b = Math.Abs(derivativeSolver.Invoke(rootMax));
 
-			foreach (var interval in intervals) {
-				List<(double a, double b, double epsilon, double mid, double fMid, char sign)> iterations = new(); // List to hold iteration data
+                        var max = Math.Max(a, b);
+                        var min = Math.Min(a, b);
 
-				double a = interval.min;
-				double b = interval.max;
-				double mid = (a + b) / 2.0;
-				double epsilon = b - a;
-				bool flip = interval.flip;
+                        var maxVar = max == a ? rootMin : rootMax;
+                        var minVar = min == a ? rootMin : rootMax;
 
-				while (epsilon > tolerance) {
-					double f_a = solver.Invoke(a);
-					double f_b = solver.Invoke(b);
-					double f_mid = solver.Invoke(mid);
+                        sb.AppendLine($"[{rootMin}; {rootMax}]");
+                        sb.AppendLine($"|f'({maxVar})| = {max} = max");
+                        sb.AppendLine($"|f'({minVar})| = {min} = min");
+                        sb.Append($"{max} <= {min * 2} - ");
 
-					// Record iteration data
-					iterations.Add((a, b, epsilon, mid, fMid: f_mid, sign: f_mid < 0 ? '-' : '+'));
-					if (flip) {
-						if (f_mid < 0) { // root is in [a, mid]
-							b = mid;
-						} else {
-							a = mid;
-						}
-					} else {
-						if (f_mid >= 0) { // root is in [a, mid]
-							b = mid;
-						} else {
-							a = mid;
-						}
-					}
+                        while (max > min * 2) {
+                            sb.AppendLine("invalid");
+                            tests.Add(sb.ToString());
+                            sb.Clear();
 
-					mid = (a + b) / 2.0;
+                            var signA    = solver.Invoke(rootMin) < 0 ? '-' : '+';
+                            var signB    = solver.Invoke(rootMax) < 0 ? '-' : '+';
+                            var midPoint = (rootMin + rootMax) / 2;
 
-					epsilon = b - a;
-				}
+                            Console.WriteLine(midPoint);
 
-				var fmid = solver.Invoke(mid);
+                            var midPointSign = solver.Invoke(midPoint) < 0 ? '-' : '+';
+                            Console.WriteLine(signA);
+                            Console.WriteLine(signB);
+                            Console.WriteLine(midPointSign);
+                            Console.WriteLine();
 
-				iterations.Add((a, b, epsilon, mid, fMid: fmid, sign: fmid < 0 ? '-' : '+'));
+                            if ((midPointSign == '+' && n_root.flip) || (midPointSign == '-' && !n_root.flip))
+                                rootMin = midPoint;
+                            else
+                                rootMax = midPoint;
 
-				output.Add(iterations);
-			}
+                            a = Math.Abs(derivativeSolver.Invoke(rootMin));
+                            b = Math.Abs(derivativeSolver.Invoke(rootMax));
 
-			return output;
-		}
+                            max = Math.Max(a, b);
+                            min = Math.Min(a, b);
 
-		public override float GetMenuHeight() {
-			return 600;
-		}
+                            maxVar = max == a ? rootMin : rootMax;
+                            minVar = min == a ? rootMin : rootMax;
 
-		public override float GetMenuWidth() {
-			return 700;
-		}
-	}
+                            sb.AppendLine($"[{rootMin}; {rootMax}]");
+                            sb.AppendLine($"|f'({maxVar})| = {max} = max");
+                            sb.AppendLine($"|f'({minVar})| = {min} = min");
+                            sb.Append($"{max} <= {min * 2} - ");
+                        }
+
+                        sb.AppendLine("valid");
+                        tests.Add(sb.ToString());
+                        sb.Clear();
+
+                        var da = derivativeSolver.Invoke(rootMin);
+                        var db = derivativeSolver.Invoke(rootMax);
+
+                        var dda = _doubleDerivative.Invoke(rootMin);
+                        var ddb = _doubleDerivative.Invoke(rootMax);
+
+                        var aSign = solver.Invoke(rootMin) < 0 ? '-' : '+';
+                        var bSign = solver.Invoke(rootMax) < 0 ? '-' : '+';
+
+                        var dfx     = Math.Max(da, db);
+                        var dfxSign = dfx < 0 ? '-' : '+';
+
+                        var ddfx     = Math.Max(dda, ddb);
+                        var ddfxSign = ddfx < 0 ? '-' : '+';
+
+                        var xn   = 0d;
+                        var side = 0;
+
+                        if (aSign == bSign) {
+                            _RootsTables.RemoveAt(i);
+                            continue;
+                        }
+
+                        if ((aSign == '-' && bSign == '+' && dfxSign == '+' && ddfxSign == '+') ||
+                            (aSign == '+' && bSign == '-' && dfxSign == '-' && ddfxSign == '-')) {
+                            xn   = rootMax;
+                            side = 0;
+                        }
+                        else if ((aSign == '-' && bSign == '+' && dfxSign == '+' && ddfxSign == '-') ||
+                                 (aSign == '+' && bSign == '-' && dfxSign == '-' && ddfxSign == '+')) {
+                            xn   = rootMin;
+                            side = 1;
+                        }
+                        else {
+                            _RootsTables.RemoveAt(i);
+                            continue;
+                        }
+
+                        n_iterations.Add(NewtonsMethod(solver, derivativeSolver, xn, rootMin, rootMax, epsilon, side));
+
+                        EpsilonTables.Add((int index) => {
+                            var iteration = n_iterations[index];
+
+                            GUI.Table("EpsilonTable", ["n", "xn", "epsilon"], delegate {
+                                for (var i = 0; i < iteration.steps.Count; i++) {
+                                    var row = iteration.steps[i];
+
+                                    ImGui.TableNextRow();
+
+                                    ImGui.TableNextColumn();
+                                    ImGui.Text(row.iteration.ToString());
+
+                                    ImGui.TableNextColumn();
+                                    ImGui.Text(row.xn.ToString());
+
+                                    ImGui.TableNextColumn();
+                                    ImGui.Text(i == 0 ? "-" : row.epsilon.ToString());
+                                }
+                            }, ImGuiTableFlags.Borders);
+                            var answer = iteration.root;
+
+                            var precision = epsilon.ToString("0.################").Split('.')[1].Length;
+                            var sb        = new StringBuilder();
+                            sb.Append("##0");
+                            sb.Append('.');
+                            sb.Append('0', precision);
+                            ImGui.Text($"x{idx + 1} = {Math.Round(answer, precision).ToString(sb.ToString())}");
+                        });
+
+                        intervalTests.Add(tests);
+                    }
+
+                    break;
+            }
+
+            _resultExists = true;
+        }
+        catch {
+            _resultExists      = false;
+            _useManualInterval = true;
+        }
+    }
+
+    private List<(double min, double max)> FindRootIntervals(Func<double, double> f,
+                                                             double               start,
+                                                             double               end,
+                                                             double               step) {
+        var intervals = new List<(double min, double max)>();
+
+        var prevX = start;
+        var prevY = f(prevX);
+
+        for (var x = start + step; x <= end; x += step) {
+            var y = f(x);
+
+            // Check for a sign change
+            if (prevY * y < 0) // Root is bracketed
+                intervals.Add((prevX, x));
+
+            // Update previous values
+            prevX = x;
+            prevY = y;
+        }
+
+        return intervals;
+    }
+
+    private (double root, List<(int iteration, double xn, double epsilon)> steps) NewtonsMethod(
+        Func<double, double> f,
+        Func<double, double> fd,
+        double               xn,
+        double               a,
+        double               b,
+        double               epsilon,
+        int                  side) {
+        var steps = new List<(int iteration, double xn, double epsilon)>();
+
+        double xn_old = 0;
+        steps.Add((0, xn, Math.Abs(xn - xn_old)));
+        for (var iteration = 1;; iteration++) {
+            xn_old = xn;
+
+            if (side == 0) {
+                if (iteration == 0)
+                    xn = b;
+                else
+                    xn -= f(xn) / fd(xn);
+            }
+            else {
+                if (iteration == 0)
+                    xn = a;
+                else
+                    xn -= f(xn) / fd(xn);
+            }
+
+            steps.Add((iteration, xn, Math.Abs(xn - xn_old)));
+
+            // Check stopping criteria
+            if (Math.Abs(xn - xn_old) <= epsilon)
+                break;
+        }
+
+        return (xn_old, steps);
+    }
+
+    private (double root, List<(int iteration, double xn, double epsilon)> steps) RegulaFalsi(
+        Func<double, double> f,
+        double               xn,
+        double               a,
+        double               b,
+        double               epsilon,
+        int                  side) {
+        var steps = new List<(int iteration, double xn, double epsilon)>();
+
+        double xn_old = 0;
+        steps.Add((0, xn, Math.Abs(xn - xn_old)));
+        for (var iteration = 1;; iteration++) {
+            xn_old = xn;
+
+            if (side == 0) {
+                if (iteration == 0)
+                    xn = b - f(b) * (b - a) / (f(b) - f(a));
+                else
+                    xn -= f(xn) * (xn - a) / (f(xn) - f(a));
+            }
+            else {
+                if (iteration == 0)
+                    xn = a - f(a) * (b - a) / (f(b) - f(a));
+                else
+                    xn -= f(xn) * (b - xn) / (f(b) - f(xn));
+            }
+
+            steps.Add((iteration, xn, Math.Abs(xn - xn_old)));
+
+            // Check stopping criteria
+            if (Math.Abs(xn - xn_old) <= epsilon)
+                break;
+        }
+
+        return (xn_old, steps);
+    }
+
+    private void DisplayRootsTable(List<string> rootValues, List<char> rootSigns) {
+        if (ImGui.BeginTable("SignTable", rootValues.Count + 1, ImGuiTableFlags.Borders)) {
+            ImGui.TableNextRow();
+
+            ImGui.TableNextColumn();
+            ImGui.Text("x");
+
+            foreach (var root in rootValues) {
+                ImGui.TableNextColumn();
+                ImGui.Text(root);
+            }
+
+            ImGui.TableNextRow();
+
+            ImGui.TableNextColumn();
+            ImGui.Text("sign f(x)");
+
+            foreach (var root in rootSigns) {
+                ImGui.TableNextColumn();
+                ImGui.Text(root.ToString());
+            }
+
+            ImGui.EndTable();
+        }
+    }
+
+    private List<List<(double a, double b, double epsilon, double mid, double fMid, char sign)>> Bisection(
+        List<(double min, double max, bool flip)> intervals,
+        double                                    tolerance) {
+        List<List<(double a, double b, double epsilon, double mid, double fMid, char sign)>> output = [];
+
+        var x        = SymbolicExpression.Variable("x");
+        var function = SymbolicExpression.Parse(expr);
+        var solver = function.Compile("x");
+
+        foreach (var interval in intervals) {
+            List<(double a, double b, double epsilon, double mid, double fMid, char sign)>
+                iterations = []; // List to hold iteration data
+
+            var a       = interval.min;
+            var b       = interval.max;
+            var mid     = (a + b) / 2.0;
+            var epsilon = b - a;
+            var flip    = interval.flip;
+
+            while (epsilon > tolerance) {
+                var f_a   = solver.Invoke(a);
+                var f_b   = solver.Invoke(b);
+                var f_mid = solver.Invoke(mid);
+
+                // Record iteration data
+                iterations.Add((a, b, epsilon, mid, fMid: f_mid, sign: f_mid < 0 ? '-' : '+'));
+                if (flip) {
+                    if (f_mid < 0) // root is in [a, mid]
+                        b = mid;
+                    else
+                        a = mid;
+                }
+                else {
+                    if (f_mid >= 0) // root is in [a, mid]
+                        b = mid;
+                    else
+                        a = mid;
+                }
+
+                mid = (a + b) / 2.0;
+
+                epsilon = b - a;
+            }
+
+            var fmid = solver.Invoke(mid);
+
+            iterations.Add((a, b, epsilon, mid, fMid: fmid, sign: fmid < 0 ? '-' : '+'));
+
+            output.Add(iterations);
+        }
+
+        return output;
+    }
+
+    public override float GetMenuHeight() {
+        return 600;
+    }
+
+    public override float GetMenuWidth() {
+        return 700;
+    }
 }

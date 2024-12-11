@@ -1,20 +1,20 @@
-﻿using CS_IMGUI.GUI;
+﻿using NonLinearEquationSolve.GUI;
 
-namespace CS_IMGUI {
-	public class Program {
-		private Renderer gui;
-		private ContextManager ctx;
+namespace NonLinearEquationSolve;
 
-		public static void Main() { // Entry point
-			new Program().Start().Wait();
-		}
+public class Program {
+    private Renderer       gui;
+    private ContextManager ctx;
 
-		private async Task Start() {
-			ctx = new ContextManager();
+    public static void Main() { // Entry point
+        new Program().Start().Wait();
+    }
 
-			gui = new Renderer(ctx);
+    private async Task Start() {
+        ctx = new ContextManager();
 
-			await gui.Start();
-		}
-	}
+        gui = new Renderer(ctx);
+
+        await gui.Start();
+    }
 }

@@ -1,11 +1,11 @@
-﻿using CS_IMGUI.GUI;
+﻿using NonLinearEquationSolve.GUI;
 
-namespace CS_IMGUI {
-	public class ContextManager {
-		public Renderer renderer { get; private set; }
+namespace NonLinearEquationSolve;
 
-		public void SetRenderer(Renderer _renderer) {
-			renderer = _renderer;
-		}
-	}
+public class ContextManager {
+    public Renderer renderer { get; private set; }
+
+    public void SetRenderer(Renderer _renderer) {
+        renderer = _renderer;
+    }
 }

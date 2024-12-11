@@ -1,23 +1,21 @@
 ﻿using ImGuiNET;
 
-namespace CS_IMGUI.GUI.Menus.Message {
-	public class Info(string message) : Message(message) {
-		public override void Render() {
-			ImGui.Begin("Info", ImGuiWindowFlags.NoScrollbar);
+namespace NonLinearEquationSolve.GUI.Menus.Message;
 
-			ImGui.SetWindowFontScale(1.3f);
+public class Info(string message) : Message(message) {
+    public override void Render() {
+        ImGui.Begin("Info", ImGuiWindowFlags.NoScrollbar);
 
-			GUI.CenteredWrappedText(_message, 5);
+        ImGui.SetWindowFontScale(1.3f);
 
-			GUI.SpaceY(5);
+        GUI.CenteredWrappedText(_message, 5);
 
-			ImGui.Separator();
+        GUI.SpaceY(5);
 
-			if (GUI.FullWidthButton("OK")) {
-				acknowledged = true;
-			}
+        ImGui.Separator();
 
-			ImGui.End();
-		}
-	}
+        if (GUI.FullWidthButton("OK")) acknowledged = true;
+
+        ImGui.End();
+    }
 }

@@ -1,33 +1,33 @@
 ﻿using ImGuiNET;
 
-namespace CS_IMGUI.GUI.Menus.Message {
-	public class Dialog : Message {
-		private List<string> _options;
-		private Action<int> _callback;
+namespace NonLinearEquationSolve.GUI.Menus.Message;
 
-		public Dialog(string message, ICollection<string> options, Action<int> callback) : base(message) {
-			_options = [.. options];
-			_callback = callback;
-		}
+public class Dialog : Message {
+    private List<string> _options;
+    private Action<int>  _callback;
 
-		public override void Render() {
-			ImGui.Begin("Notice", ImGuiWindowFlags.NoScrollbar);
+    public Dialog(string message, ICollection<string> options, Action<int> callback) : base(message) {
+        _options  = [.. options];
+        _callback = callback;
+    }
 
-			ImGui.SetWindowFontScale(1.3f);
+    public override void Render() {
+        ImGui.Begin("Notice", ImGuiWindowFlags.NoScrollbar);
 
-			GUI.CenteredWrappedText(_message, 5);
+        ImGui.SetWindowFontScale(1.3f);
 
-			GUI.SpaceY(5);
+        GUI.CenteredWrappedText(_message, 5);
 
-			ImGui.Separator();
-			var selection = GUI.ButtonList(_options);
+        GUI.SpaceY(5);
 
-			if (selection.HasValue) {
-				_callback.Invoke(selection.Value);
-				acknowledged = true;
-			}
+        ImGui.Separator();
+        var selection = GUI.ButtonList(_options);
 
-			ImGui.End();
-		}
-	}
+        if (selection.HasValue) {
+            _callback.Invoke(selection.Value);
+            acknowledged = true;
+        }
+
+        ImGui.End();
+    }
 }
