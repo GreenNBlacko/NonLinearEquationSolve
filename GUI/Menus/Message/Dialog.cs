@@ -12,7 +12,9 @@ public class Dialog : Message {
     }
 
     public override void Render() {
-        ImGui.Begin("Notice", ImGuiWindowFlags.NoScrollbar);
+        ImGui.Begin("Notice", flags);
+        
+        GUI.ctx.window.Title = "Notice";
 
         ImGui.SetWindowFontScale(1.3f);
 

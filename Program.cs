@@ -15,6 +15,7 @@ public class Program {
 
         gui = new Renderer(ctx);
 
-        await gui.Start();
+        while (true)
+            await Task.Yield();
     }
 }

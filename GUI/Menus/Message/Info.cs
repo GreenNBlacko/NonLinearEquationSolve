@@ -4,7 +4,9 @@ namespace NonLinearEquationSolve.GUI.Menus.Message;
 
 public class Info(string message) : Message(message) {
     public override void Render() {
-        ImGui.Begin("Info", ImGuiWindowFlags.NoScrollbar);
+        ImGui.Begin("Info", flags);
+        
+        GUI.ctx.window.Title = "Notice";
 
         ImGui.SetWindowFontScale(1.3f);
 
