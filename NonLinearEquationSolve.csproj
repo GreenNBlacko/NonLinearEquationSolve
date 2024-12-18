@@ -19,6 +19,7 @@
         <PackageReference Include="GtkSharp" Version="3.24.24.117-develop" />
         <PackageReference Include="ImGui.NET" Version="1.91.0.1" />
         <PackageReference Include="MathNet.Symbolics" Version="0.25.0" />
+        <PackageReference Include="TextCopy" Version="6.2.1" />
         <PackageReference Include="Twizzle.ImPlot.NET" Version="1.89.4" />
         <PackageReference Include="Veldrid.SDL2" Version="4.9.0" />
         <PackageReference Include="Veldrid.StartupUtilities" Version="4.9.0" />

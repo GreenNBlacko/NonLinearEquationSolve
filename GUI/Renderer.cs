@@ -6,6 +6,7 @@ using System.Runtime.InteropServices;
 using ImGuiNET;
 using NonLinearEquationSolve.GUI.Menus;
 using NonLinearEquationSolve.GUI.Menus.Message;
+using TextCopy;
 using Veldrid;
 using Veldrid.OpenGLBinding;
 using Veldrid.Sdl2;
@@ -14,6 +15,9 @@ using Veldrid.StartupUtilities;
 namespace NonLinearEquationSolve.GUI;
 
 public class Renderer {
+    private bool IsWindows => RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
+    private bool IsLinux   => RuntimeInformation.IsOSPlatform(OSPlatform.Linux);
+    
     private static Sdl2Window _window;
     private static GraphicsDevice _gd;
     private static CommandList _cl;
@@ -141,8 +145,13 @@ public class Renderer {
             
             OnLoad();
             
-            var setClipboardDelegate = new SetClipboardTextDelegate(SetClipboardText);
-            var getClipboardDelegate = new GetClipboardTextDelegate(GetClipboardText);
+            var setClipboardDelegate = new SetClipboardTextDelegate(
+                                                                    IsLinux ? (SetClipboardTextDelegate)SetClipboardText : (SetClipboardTextDelegate)SetClipboardTextWindows
+                                                                   );
+
+            var getClipboardDelegate = new GetClipboardTextDelegate(
+                                                                    IsLinux ? (GetClipboardTextDelegate)GetClipboardText : (GetClipboardTextDelegate)GetClipboardTextWindows
+                                                                   );
 
             ImGui.GetIO().SetClipboardTextFn = Marshal.GetFunctionPointerForDelegate(setClipboardDelegate);
             ImGui.GetIO().GetClipboardTextFn = Marshal.GetFunctionPointerForDelegate(getClipboardDelegate);
@@ -241,6 +250,23 @@ public class Renderer {
             return clipboardTextPtr;
         }
         return IntPtr.Zero;
+    }
+    
+    public static void SetClipboardTextWindows(IntPtr userData, string text)
+    {
+        ClipboardService.SetText(text); // Automatically handles the correct OS
+    }
+
+    public static IntPtr GetClipboardTextWindows(IntPtr userData)
+    {
+        string clipboardText = ClipboardService.GetText();
+
+        if (clipboardText == null)
+        {
+            return IntPtr.Zero;
+        }
+
+        return Marshal.StringToHGlobalAnsi(clipboardText);
     }
 
     protected void Render()
